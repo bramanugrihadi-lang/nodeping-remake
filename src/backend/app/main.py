@@ -16,16 +16,13 @@ async def lifespan(app: FastAPI):
     
     # Start scheduler
     from app.scheduler import start_scheduler
-    scheduler_task = asyncio.create_task(start_scheduler())
+    start_scheduler()
     
     yield
     
     # Shutdown
-    scheduler_task.cancel()
-    try:
-        await scheduler_task
-    except asyncio.CancelledError:
-        pass
+    from app.scheduler import stop_scheduler
+    await stop_scheduler()
     print("✓ Scheduler stopped")
 
 
@@ -48,7 +45,6 @@ app.add_middleware(
 # Include routers
 app.include_router(routers.auth.router)
 app.include_router(routers.targets.router)
-app.include_router(routers.sync.router)
 app.include_router(routers.users.router)
 app.include_router(routers.settings.router)
 app.include_router(routers.reports.router)

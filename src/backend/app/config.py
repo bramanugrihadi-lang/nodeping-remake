@@ -1,8 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     SECRET_KEY: str
     ADMIN_PASSWORD: str = "admin123"
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/nodeping.db"

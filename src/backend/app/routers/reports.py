@@ -37,14 +37,18 @@ async def generate_pdf_now(
     from app.pdf_reports import generate_report
     file_path = await generate_report(db)
     
-    # Extract filename from path
     filename = Path(file_path).name
     
-    return PDFReport(
-        id=1,
-        filename=filename,
-        generated_at=file_path
+    cursor = await db.execute(
+        "SELECT id, filename, generated_at FROM pdf_reports WHERE filename = ? ORDER BY id DESC LIMIT 1",
+        (filename,)
     )
+    row = await cursor.fetchone()
+    
+    if row:
+        return PDFReport(id=row["id"], filename=row["filename"], generated_at=row["generated_at"])
+    
+    return PDFReport(id=0, filename=filename, generated_at=str(Path(file_path).stat().st_mtime))
 
 
 @router.get("/reports/{report_id}/download")

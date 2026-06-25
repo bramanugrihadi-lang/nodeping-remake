@@ -3,13 +3,17 @@ import asyncio
 import subprocess
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config import settings
-from app.schemas import Target, TargetCreate, TargetUpdate
-from app.models import User, Target as TargetModel, History
+from app.database import get_db
+from app.schemas import User
 import aiosqlite
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+security_scheme = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
@@ -28,12 +32,14 @@ def create_access_token(user_id: int, role: str) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
 
-async def get_current_user(db, token: str) -> Optional[User]:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+    db=Depends(get_db)
+) -> User:
     import jwt
-    from fastapi import HTTPException, status
     
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=["HS256"])
         user_id = int(payload["sub"])
         role = payload["role"]
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, ValueError, KeyError):
@@ -56,7 +62,6 @@ async def get_current_user(db, token: str) -> Optional[User]:
 
 
 async def require_admin(user: User):
-    from fastapi import HTTPException, status
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -112,21 +117,20 @@ def clamp_interval(val: int) -> int:
     return max(30, min(3600, val))
 
 
-async def ping_target(target: TargetModel) -> dict:
+async def ping_target(ip: str, ping_count: int = 4) -> dict:
     """Run ping command and return results."""
     try:
         proc = await asyncio.create_subprocess_exec(
             "ping",
-            "-c", str(target.ping_count),
+            "-c", str(ping_count),
             "-W", "2",
-            target.ip,
+            ip,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
         
         if proc.returncode != 0:
-            # Host unreachable or ping failed
             return {
                 "avg_latency": 0.0,
                 "loss": 100.0,
@@ -135,18 +139,13 @@ async def ping_target(target: TargetModel) -> dict:
         
         output = stdout.decode()
         
-        # Parse ping output for loss percentage and avg latency
-        import re
-        
-        # Extract packet loss percentage
         loss_match = re.search(r'(\d+)%\s*packet\s*loss', output)
         loss = float(loss_match.group(1)) if loss_match else 100.0
         
-        # Extract avg latency (ms)
         lat_match = re.search(r'[\s=](\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s*ms', output)
         avg_latency = 0.0
         if lat_match:
-            avg_latency = float(lat_match.group(2))  # Mean (second value)
+            avg_latency = float(lat_match.group(2))
         
         is_online = loss <= 50.0
         
@@ -156,7 +155,7 @@ async def ping_target(target: TargetModel) -> dict:
             "is_online": is_online
         }
     
-    except Exception as e:
+    except Exception:
         return {
             "avg_latency": 0.0,
             "loss": 100.0,
@@ -170,35 +169,27 @@ async def run_ping_cycle(db):
     targets = await cursor.fetchall()
     
     for target_row in targets:
-        target = TargetModel(
-            id=target_row["id"],
-            name=target_row["name"],
-            ip=target_row["ip"],
-            interval=target_row["interval"],
-            ping_count=target_row["ping_count"],
-            last_loss=target_row["last_loss"],
-            is_online=bool(target_row["is_online"])
-        )
+        target_name = target_row["name"]
+        target_ip = target_row["ip"]
+        target_id = target_row["id"]
+        ping_count = target_row["ping_count"]
+        was_online = bool(target_row["is_online"])
         
-        result = await ping_target(target)
+        result = await ping_target(target_ip, ping_count)
         
-        # Insert history record
         now = datetime.now(timezone.utc)
         await db.execute(
             "INSERT INTO history (target_name, avg_latency, loss, timestamp) VALUES (?, ?, ?, ?)",
-            (target.name, result["avg_latency"], result["loss"], now.isoformat())
+            (target_name, result["avg_latency"], result["loss"], now.isoformat())
         )
         
-        # Update target status
         await db.execute(
             "UPDATE targets SET last_loss = ?, is_online = ? WHERE id = ?",
-            (result["loss"], 1 if result["is_online"] else 0, target.id)
+            (result["loss"], 1 if result["is_online"] else 0, target_id)
         )
         
-        # Check for alert condition (loss > 50%)
-        if result["loss"] > 50.0 and target.is_online:
-            # Trigger alert (will be implemented in telegram.py)
-            print(f"ALERT: {target.name} is DOWN (loss: {result['loss']}%)")
+        if result["loss"] > 50.0 and was_online:
+            print(f"ALERT: {target_name} is DOWN (loss: {result['loss']}%)")
         
         await db.commit()
     
