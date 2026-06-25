@@ -1,0 +1,99 @@
+Warning: Unknown toolsets: messaging
+  ┊ review diff
+a//home/kacroet/swarm-workspace/20260625_103336/review.md → b//home/kacroet/swarm-workspace/20260625_103336/review.md
+@@ -0,0 +1,409 @@
++# NodePing Remake — Code Review
++
++**Date:** 2026-06-25  
++**Reviewer:** AI Reviewer Agent  
++**Status:** REJECTED — Incomplete, cannot run
++
++---
++
++## 1. Summary
++
++The codebase has a solid foundation for what exists but is **severely incomplete**. The backend is missing 70% of the planned files, including the FastAPI entry point. The frontend imports 4 page components that don't exist. This codebase **cannot be built or run** in its current state.
++
++## 2. Critical / Blocking Issues
++
++### 2.1 Missing Backend Files (7 of 17 planned files absent)
++
++| Planned File | Status | Impact |
++|---|---|---|
++| `app/main.py` | **MISSING** | App cannot start |
++| `app/scheduler.py` | **MISSING** | Ping engine never runs; no cron jobs |
++| `app/telegram.py` | **MISSING** | No alerting; no ACK polling |
++| `app/pdf_reports.py` | **MISSING** | No PDF generation |
++| `app/routers/users.py` | **MISSING** | No user CRUD |
++| `app/routers/settings.py` | **MISSING** | No Telegram settings CRUD |
++| `app/routers/reports.py` | **MISSING** | No report endpoints |
++| `app/routers/__init__.py` | **MISSING** | Package init; may break imports |
++| `Dockerfile` (backend) | **MISSING** | Cannot containerize |
++| `Dockerfile` (frontend) | **MISSING** | Cannot containerize |
++| `docker-compose.yml` | **MISSING** | Cannot deploy |
++| `nginx.conf` | **MISSING** | No reverse proxy config |
++
++### 2.2 Missing Frontend Pages (4 of 4 pages absent)
++
++- `pages/LoginPage.jsx` — **MISSING**
++- `pages/DashboardPage.jsx` — **MISSING**
++- `pages/SettingsPage.jsx` — **MISSING**
++- `pages/ReportsPage.jsx` — **MISSING**
++
++`App.jsx` imports all four. The frontend will crash at startup with `ModuleNotFoundError`.
++
++### 2.3 Architectural Mismatch: SQLAlchemy Models vs Raw SQL
++
++**Severity: HIGH**
++
++The plan specifies SQLAlchemy models, and `models.py` defines them. However, **every other file uses raw aiosqlite queries** — `database.py`, `auth.py`, `routers/auth.py`, and `routers/targets.py` all use `await db.execute("SELECT ...")`.
++
++The SQLAlchemy models in `models.py` are **dead code** — they are never instantiated via SQLAlchemy sessions, never used for queries, and never used for migrations. The `TargetModel` constructor in `auth.py:run_ping_cycle` (line 173) instantiates them manually as plain objects, bypassing SQLAlchemy entirely.
++
++**Fix:** Pick one approach and commit to it. Either:
++- Remove `models.py` and use raw aiosqlite throughout (simpler, matches current code), OR
++- Rewrite `database.py` to use SQLAlchemy async sessions and migrate all queries
++
++### 2.4 Auth Dependency is Broken
++
++**Severity: CRITICAL**  
++**File:** `app/auth.py:31-55`, `app/routers/auth.py:42`
++
++```python
++async def get_current_user(db, token: str) -> Optional[User]:
++```
++
++This function takes `token` as a positional parameter, but FastAPI dependencies cannot inject the Authorization header value into a parameter named `token`. The router uses:
++
++```python
++async def get_me(current_user: User = Depends(get_current_user)):
++```
++
++This will fail with a `TypeError` because `token` is required but not provided by any dependency. FastAPI dependency injection works by matching parameter names to registered dependencies — `db` is provided by `get_db`, but `token` has no provider.
++
++**Fix:** `get_current_user` must extract the token from the request itself:
++```python
++async def get_current_user(request: Request, db=Depends(get_db)):
++    auth_header = request.headers.get("Authorization")
++    if not auth_header or not auth_header.startswith("Bearer "):
++        raise HTTPException(401)
++    token = auth_header.split(" ", 1)[1]
++    # ... decode and validate
++```
+… omitted 331 diff line(s) across 1 additional file(s)/section(s)
+Review written to `/home/kacroet/swarm-workspace/20260625_103336/review.md`.
+
+**Key findings:**
+
+- **REJECTED** — codebase is ~30% complete, cannot run
+- **CRITICAL:** `main.py` missing (no entry point), `get_current_user` dependency broken (token extraction from wrong place), all 4 frontend pages missing
+- **HIGH:** SQLAlchemy models are dead code (everything uses raw aiosqlite), `sync-status` avg_latency computes loss not latency, in-memory rate limiter won't survive restart, empty catch blocks everywhere
+- **MEDIUM:** no auth guards on `get_targets`/`get_history`/`sync-status`, dual polling loops waste bandwidth, host regex rejects IPv6
+- **SECURITY:** PASS — no command injection, no SQL injection, bcrypt hashing, proper JWT
+- **14 issues** documented with file:line references and fixes
+
+Estimated effort: 3-5 days to complete the remaining 70%.
+
+REVIEW_COMPLETE
+
+session_id: 20260625_104545_7b77aa

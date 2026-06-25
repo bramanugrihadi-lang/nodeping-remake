@@ -1,0 +1,93 @@
+Warning: Unknown toolsets: messaging
+  ┊ review diff
+a//home/kacroet/swarm-workspace/20260625_103336/plan.md → b//home/kacroet/swarm-workspace/20260625_103336/plan.md
+@@ -0,0 +1,337 @@
++# NodePing Remake — Implementation Plan
++
++## Architecture Overview
++
++```
++docker-compose
++├── backend/          FastAPI + SQLite + APScheduler
++│   ├── app/
++│   │   ├── main.py           FastAPI app entry
++│   │   ├── config.py         Settings from env
++│   │   ├── database.py       SQLite init + session
++│   │   ├── models.py         SQLAlchemy models
++│   │   ├── schemas.py        Pydantic schemas
++│   │   ├── auth.py           JWT + password hashing + rate limiter
++│   │   ├── ping_engine.py    Subprocess ping + history
++│   │   ├── telegram.py       Telegram bot + alerts + ACK polling
++│   │   ├── pdf_reports.py    HTML→PDF generation
++│   │   ├── scheduler.py      APScheduler cron jobs
++│   │   └── routers/
++│   │       ├── auth.py       /api/login, /api/me, /api/logout
++│   │       ├── targets.py    /api/targets CRUD + /api/history/:name
++│   │       ├── users.py      /api/users CRUD (admin)
++│   │       ├── settings.py   /api/settings/telegram
++│   │       ├── reports.py    /api/reports + /api/generate-pdf-now
++│   │       └── sync.py       /api/sync-status
++│   ├── Dockerfile
++│   └── requirements.txt
++├── frontend/         React + Vite + Tailwind
++│   ├── src/
++│   │   ├── App.jsx
++│   │   ├── main.jsx
++│   │   ├── api.js            Axios client + interceptors
++│   │   ├── context/
++│   │   │   └── AuthContext.jsx
++│   │   ├── components/
++│   │   │   ├── Layout.jsx          Sidebar + topbar shell
++│   │   │   ├── TopBar.jsx          Logo, user, logout
++│   │   │   ├── Sidebar.jsx         Target list, search, counts
++│   │   │   ├── KPICards.jsx        Total/online/offline/avg latency
++│   │   │   ├── TargetDetail.jsx    Latency chart + loss + uptime
++│   │   │   ├── TargetForm.jsx      Add/edit modal (admin)
++│   │   │   ├── LatencyChart.jsx    Recharts line chart
++│   │   │   ├── ProtectedRoute.jsx  Role-based guard
++│   │   │   └── Toast.jsx           Notification toast
++│   │   └── pages/
++│   │       ├── LoginPage.jsx
++│   │       ├── DashboardPage.jsx
++│   │       ├── SettingsPage.jsx
++│   │       └── ReportsPage.jsx
++│   ├── Dockerfile
++│   └── nginx.conf
++└── docker-compose.yml
++```
++
++---
++
++## Subtask 1: Project Scaffolding & Database Layer
++
++### Backend
++| File | Purpose |
++|------|---------|
++| `backend/requirements.txt` | fastapi, uvicorn, sqlalchemy, aiosqlite, pyjwt, passlib[bcrypt], python-multipart, apscheduler, httpx, weasyprint, jinja2, pydantic-settings |
++| `backend/app/config.py` | `class Settings(BaseSettings): SECRET_KEY, ADMIN_PASSWORD, DATABASE_URL, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, JWT_EXPIRY_HOURS=12` |
++| `backend/app/database.py` | `get_db()` async generator, `init_db()` creates tables + seeds default admin |
++| `backend/app/models.py` | SQLAlchemy models (see schema below) |
++| `backend/app/schemas.py` | Pydantic request/response schemas for all entities |
++
++**SQLAlchemy Models:**
++```python
++class User(Base):
++    id: int (PK)
++    username: str (unique)
++    password_hash: str
++    role: str  # "admin" | "viewer"
++
++class Target(Base):
++    id: int (PK)
++    name: str (unique)
+… omitted 259 diff line(s) across 1 additional file(s)/section(s)
+PLAN_COMPLETE
+
+Plan written to `/home/kacroet/swarm-workspace/20260625_103336/plan.md` — 336 lines covering:
+
+- **5 subtasks:** Scaffolding+DB, Auth, Ping Engine+History, Telegram Alerts+ACK, PDF Reports+User Management
+- **Backend:** 16 files, 12 API endpoints, full function signatures, SQLAlchemy models, ping engine via subprocess, APScheduler cron, Telegram bot with ACK polling, weasyprint PDF generation
+- **Frontend:** 14 components/pages, component tree, Tailwind dark NOC theme, Axios client with JWT interceptor, AuthContext, protected routes, Recharts latency charts
+- **Infrastructure:** docker-compose with nginx reverse proxy, environment variables, port 3000
+
+session_id: 20260625_103340_6e5032

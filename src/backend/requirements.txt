@@ -1,0 +1,12 @@
+fastapi==0.109.0
+uvicorn==0.27.0
+sqlalchemy==2.0.25
+aiosqlite==0.20.0
+pyjwt==2.8.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+apscheduler==3.10.4
+httpx==0.26.0
+weasyprint==62.3
+jinja2==3.1.4
+pydantic-settings==2.2.1

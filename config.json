@@ -1,0 +1,28 @@
+{
+  "task": "\n## PRD: NodePing Remake \u2014 Network/RTO Monitoring Dashboard\n\nRemake NodePing V13 dari Node.js/Express ke modern stack. Keep ALL features.\n\n### Backend (FastAPI + SQLite):\n1. **Auth System**:\n   - Login/logout with JWT tokens\n   - Admin + Viewer roles\n   - Login rate limiter (5 attempts, 15min window)\n   - Default admin user (admin/admin123)\n   - User management CRUD (admin only)\n\n2. **Ping Monitoring Engine**:\n   - Targets CRUD (name, IP/host, interval seconds, ping_count)\n   - Run ping sequentially per target using subprocess (execFile, no shell)\n   - Store: avg_latency, packet_loss %, timestamp (UTC, convert to WIB+7 on display)\n   - Downtime tracker: track when target goes offline, duration\n   - Input validation: host regex (no shell metachars), clamp intervals (min 30s, max 3600s)\n   - History compression: adaptive sampling like SmokePing (keep raw last 24h, aggregate older)\n\n3. **Telegram Alerts**:\n   - Settings CRUD (token + chatId stored in DB)\n   - Alert on target DOWN (loss > 50%)\n   - ACK system: user can acknowledge via Telegram callback button\n   - Poll Telegram updates for ACK responses\n\n4. **PDF Reports**:\n   - Scheduled: 6am, 12pm, 7pm, 10pm (configurable)\n   - Manual generate button (admin)\n   - Include all targets, uptime stats, latency charts\n   - Generate via HTML template \u2192 PDF (weasyprint or similar)\n   - Send via Telegram\n\n5. **API Endpoints**:\n   - GET/POST/DELETE /api/targets\n   - GET /api/history/:name (adaptive compression)\n   - GET/POST/DELETE /api/users (admin only)\n   - POST /api/login, GET /api/me, POST /api/logout\n   - GET/POST /api/settings/telegram (admin only)\n   - POST /api/generate-pdf-now (admin)\n   - GET /api/sync-status (real-time uptime data)\n\n### Frontend (React + Vite + Tailwind):\n1. **Login Page** \u2014 Dark NOC theme, username/password form\n2. **Main Dashboard** \u2014 NOC-style dark theme:\n   - Top bar: logo, user info, logout button\n   - Sidebar: target list with online/offline indicators, search/filter, summary counts\n   - Main area: KPI cards (total targets, online, offline, avg latency)\n   - Target detail: latency chart (last 24h), packet loss history, uptime %\n   - Add/edit/delete target forms (admin only)\n3. **Settings Page** (admin):\n   - Telegram config (token + chatId)\n   - PDF schedule config\n   - User management (add/edit/delete users)\n4. **Reports Page**:\n   - List generated PDFs\n   - Manual generate button\n   - Download/view PDFs\n\n### Database Schema (SQLite):\n- users(id, username, password_hash, role)\n- targets(id, name, ip, interval, ping_count, last_loss)\n- history(id, target_name, avg_latency, loss, timestamp)\n- settings(key, value)\n\n### Security Requirements:\n- All API endpoints require auth (except /api/login)\n- Admin-only endpoints need role check\n- No command injection (use subprocess with list args, validate hosts)\n- JWT tokens with 12h expiry\n- Input validation on all fields\n\n### Deployment:\n- Single docker-compose (FastAPI backend + React frontend via nginx)\n- Environment variables: SECRET_KEY, ADMIN_PASSWORD, DATABASE_URL\n- Port 3000\n",
+  "pipeline": [
+    "orchestrator",
+    "backend",
+    "frontend",
+    "reviewer"
+  ],
+  "agents": {
+    "orchestrator": {
+      "model": "9rs/9router/alibaba/deepseek-v4-pro",
+      "role": "Orchestrator / Planner"
+    },
+    "backend": {
+      "model": "kr/qwen3-coder-next",
+      "role": "Backend / API"
+    },
+    "frontend": {
+      "model": "9rs/9router/combo-qwen3.7-max",
+      "role": "Frontend / UI"
+    },
+    "reviewer": {
+      "model": "9rs/9router/alibaba/deepseek-v4-pro",
+      "role": "Reviewer / QA"
+    }
+  },
+  "started": "2026-06-25T10:33:36.618142"
+}

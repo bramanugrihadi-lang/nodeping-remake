@@ -1,0 +1,77 @@
+
+## PRD: NodePing Remake — Network/RTO Monitoring Dashboard
+
+Remake NodePing V13 dari Node.js/Express ke modern stack. Keep ALL features.
+
+### Backend (FastAPI + SQLite):
+1. **Auth System**:
+   - Login/logout with JWT tokens
+   - Admin + Viewer roles
+   - Login rate limiter (5 attempts, 15min window)
+   - Default admin user (admin/admin123)
+   - User management CRUD (admin only)
+
+2. **Ping Monitoring Engine**:
+   - Targets CRUD (name, IP/host, interval seconds, ping_count)
+   - Run ping sequentially per target using subprocess (execFile, no shell)
+   - Store: avg_latency, packet_loss %, timestamp (UTC, convert to WIB+7 on display)
+   - Downtime tracker: track when target goes offline, duration
+   - Input validation: host regex (no shell metachars), clamp intervals (min 30s, max 3600s)
+   - History compression: adaptive sampling like SmokePing (keep raw last 24h, aggregate older)
+
+3. **Telegram Alerts**:
+   - Settings CRUD (token + chatId stored in DB)
+   - Alert on target DOWN (loss > 50%)
+   - ACK system: user can acknowledge via Telegram callback button
+   - Poll Telegram updates for ACK responses
+
+4. **PDF Reports**:
+   - Scheduled: 6am, 12pm, 7pm, 10pm (configurable)
+   - Manual generate button (admin)
+   - Include all targets, uptime stats, latency charts
+   - Generate via HTML template → PDF (weasyprint or similar)
+   - Send via Telegram
+
+5. **API Endpoints**:
+   - GET/POST/DELETE /api/targets
+   - GET /api/history/:name (adaptive compression)
+   - GET/POST/DELETE /api/users (admin only)
+   - POST /api/login, GET /api/me, POST /api/logout
+   - GET/POST /api/settings/telegram (admin only)
+   - POST /api/generate-pdf-now (admin)
+   - GET /api/sync-status (real-time uptime data)
+
+### Frontend (React + Vite + Tailwind):
+1. **Login Page** — Dark NOC theme, username/password form
+2. **Main Dashboard** — NOC-style dark theme:
+   - Top bar: logo, user info, logout button
+   - Sidebar: target list with online/offline indicators, search/filter, summary counts
+   - Main area: KPI cards (total targets, online, offline, avg latency)
+   - Target detail: latency chart (last 24h), packet loss history, uptime %
+   - Add/edit/delete target forms (admin only)
+3. **Settings Page** (admin):
+   - Telegram config (token + chatId)
+   - PDF schedule config
+   - User management (add/edit/delete users)
+4. **Reports Page**:
+   - List generated PDFs
+   - Manual generate button
+   - Download/view PDFs
+
+### Database Schema (SQLite):
+- users(id, username, password_hash, role)
+- targets(id, name, ip, interval, ping_count, last_loss)
+- history(id, target_name, avg_latency, loss, timestamp)
+- settings(key, value)
+
+### Security Requirements:
+- All API endpoints require auth (except /api/login)
+- Admin-only endpoints need role check
+- No command injection (use subprocess with list args, validate hosts)
+- JWT tokens with 12h expiry
+- Input validation on all fields
+
+### Deployment:
+- Single docker-compose (FastAPI backend + React frontend via nginx)
+- Environment variables: SECRET_KEY, ADMIN_PASSWORD, DATABASE_URL
+- Port 3000
